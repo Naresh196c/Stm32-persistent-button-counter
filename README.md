@@ -68,7 +68,7 @@ Button → GPIO → Debounce → Counter → Flash (persist) → UART (report)
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/<your-username>/<repo-name>.git
+git clone https://github.com/Naresh196c/Stm32-persistent-button-counter.git
 
 # 2. Open STM32CubeIDE
 #    File → Open Projects from File System → select the cloned folder
