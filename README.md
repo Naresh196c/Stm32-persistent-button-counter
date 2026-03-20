@@ -1,237 +1,150 @@
-🚀 Persistent Button Press Counter using STM32 Flash
-📌 Project Overview
+# Persistent Button Press Counter — STM32F446RE
 
-This project implements a persistent button press counter using the STM32F446RE microcontroller.
+A technician presses a button each time a service is performed. The system counts every press, stores it in internal flash, and recalls it on every reboot — even after a complete power loss. No external EEPROM, no battery-backed RAM. Just the MCU's own flash and a UART terminal.
 
-Each time a button is pressed:
+> Built at AISSMS Institute of Information Technology, Pune  
+> Atharva Bobade · Siddharth Dere · Naresh Choudhary
 
-The counter increments
+---
 
-The value is stored in internal Flash memory
+## Scenario
 
-Since Flash is non-volatile, the count remains محفوظ (stored) even after:
+A maintenance team uses an STM32 Nucleo board as a service counter. Each time a technician services a machine, they press the onboard button. The system must:
 
-Power OFF
+1. Survive power cuts without losing the count
+2. Display the total service count on every startup via UART
+3. Reject false presses caused by button bounce
+4. Give visual confirmation (LED blink) on every valid press
 
-System reset
+The counter resets to 0 after 5 presses (configurable), erasing and rewriting the flash sector cleanly.
 
-On every startup, the system reads the stored value and displays it using UART, making it useful for maintenance logs and service tracking systems.
+---
 
-🎯 Objectives
+## Architecture
 
-Store button press count in Flash memory
+```
+┌─────────────────────────────────────────────────────────┐
+│                      STM32F446RE                        │
+│                                                         │
+│   PC13 ──► GPIO Poll ──► Debounce (50ms)                │
+│                               │                         │
+│                        Valid Press?                      │
+│                          │       │                       │
+│                         YES      NO ──► keep polling     │
+│                          │                               │
+│                    Increment Counter                     │
+│                          │                               │
+│              ┌───────────┴────────────┐                  │
+│              │                        │                  │
+│        Blink LED (PA5)     Write to Flash Sector 7       │
+│                                 │                        │
+│                        0x08060000 (32-bit word)          │
+│                                 │                        │
+│                        HAL_FLASHEx_Erase()               │
+│                        HAL_FLASH_Program()               │
+│                                                         │
+│   Power ON / Reset                                      │
+│        │                                                 │
+│   Read_ButtonCount() ◄── Flash Sector 7                  │
+│        │                                                 │
+│   HAL_UART_Transmit() ──► USART2 (PA2) ──► Terminal     │
+└─────────────────────────────────────────────────────────┘
+```
 
-Ensure data persists after reset and power loss
+**Data flow summary:**  
+Button → GPIO → Debounce → Counter → Flash (persist) → UART (report)
 
-Implement accurate button detection with debounce
+---
 
-Display count using UART communication
+## Build Steps
 
-Provide LED indication on valid button press
+**Requirements**
+- STM32CubeIDE v1.12.1 or later
+- STM32F446RE Nucleo-64 board
+- USB cable (for power + virtual COM port)
+- Serial terminal: PuTTY / Tera Term / STM32CubeIDE built-in console
 
-Verify system through multiple resets and power cycles
+**Steps**
 
-⚙️ Features
+```bash
+# 1. Clone the repo
+git clone https://github.com/<your-username>/<repo-name>.git
 
-✅ Persistent storage using internal Flash
+# 2. Open STM32CubeIDE
+#    File → Open Projects from File System → select the cloned folder
 
-✅ Debounced button input (no false triggering)
+# 3. Build
+#    Project → Build All   (or Ctrl + B)
+#    Confirm: no errors in the Console panel
 
-✅ UART output for monitoring
+# 4. Flash to board
+#    Run → Debug  (connects, flashes, and halts at main)
+#    Then: Run → Resume  (or press F8)
+```
 
-✅ LED feedback on button press
+No external libraries or package managers needed. Everything uses the STM32 HAL bundled with STM32CubeIDE.
 
-✅ Automatic reset when count exceeds limit
+---
 
-✅ Reliable flash read/write operations
+## Run Instructions
 
-🧠 System Working (Simple Explanation)
+1. Connect the Nucleo board via USB
+2. Open your serial terminal — select the board's virtual COM port
+3. Set baud rate to **115200**, 8N1, no flow control
+4. Reset the board (black button) or power-cycle it
+5. Watch the startup message appear, then press the blue button (B1) to increment
 
-System starts → reads count from Flash
+**Button behavior**
+- Single press → count goes up by 1, saved to flash immediately
+- Rapid pressing → still only increments by 1 (debounce active)
+- Count reaches 6 → flash erased, counter resets to 0, message printed
+- Reset / power loss → count is read back from flash on next boot
 
-Displays count on UART
+---
 
-Waits for button press
+## System Calls & HAL Functions — Where and Why
 
-When pressed:
+| Function | Where Used | Purpose |
+|----------|-----------|---------|
+| `HAL_Init()` | `main()` startup | Initialises HAL tick timer, sets up flash interface and SysTick |
+| `SystemClock_Config()` | `main()` startup | Configures PLL to run the CPU at 84 MHz from the HSI oscillator |
+| `MX_GPIO_Init()` | `main()` startup | Sets PC13 as input (button) and PA5 as push-pull output (LED) |
+| `MX_USART2_UART_Init()` | `main()` startup | Configures USART2 at 115200 baud, 8N1, TX+RX on PA2/PA3 |
+| `HAL_GPIO_ReadPin()` | Main poll loop | Reads PC13 level to detect button press (active LOW) |
+| `HAL_Delay(50)` | After first press detect | Software debounce — waits 50 ms then re-checks pin to confirm press |
+| `HAL_GPIO_WritePin()` | After confirmed press | Drives PA5 HIGH then LOW to blink the LED |
+| `HAL_FLASH_Unlock()` | `Write_ButtonCount()` | Removes write protection before any flash operation |
+| `HAL_FLASHEx_Erase()` | `Write_ButtonCount()` | Erases Sector 7 — required before writing (flash bits can only go 1→0, erase resets to all 1s) |
+| `HAL_FLASH_Program()` | `Write_ButtonCount()` | Writes the new 32-bit counter value to address `0x08060000` |
+| `HAL_FLASH_Lock()` | `Write_ButtonCount()` | Re-enables write protection after the operation |
+| `HAL_UART_Transmit()` | Startup + every press | Sends formatted count string over USART2 to the terminal |
+| `Error_Handler()` | Flash erase fail path | Disables interrupts and hangs — signals a fatal flash operation failure |
 
-Debounce applied
+---
 
-LED glows
+## Sample Run Output
 
-Count increases
+```
+System Booted. Button pressed: 3 times
 
-Stored in Flash
+ Button pressed: 4 times
 
-If count > 5:
-
-Flash erased
-
-Count reset to 0
-
-🔄 System Flow Diagram
-START
-  |
-  v
-Read Count from Flash
-  |
-  v
-Display on UART
-  |
-  v
-Wait for Button Press
-  |
-  v
-Debounce Check
-  |
-  v
-Increment Count
-  |
-  v
-Count > 5 ?
-  |        |
- YES       NO
-  |         |
-Erase Flash  Write Count
-Reset Count      |
-  |              |
-  +-------> Display Count
-🔌 Hardware Requirements
-
-STM32F446RE (Nucleo Board)
-
-Push Button (PC13)
-
-LED (PA5)
-
-USB Cable
-
-💻 Software Requirements
-
-STM32CubeIDE
-
-HAL Drivers
-
-Serial Terminal (PuTTY / Tera Term)
-
-📍 Flash Configuration
-Parameter	Value
-Sector Used	Sector 7
-Address	0x08060000
-Data Type	32-bit
-🔧 Key Functional Modules
-🔹 Read_ButtonCount()
-
-Reads value from Flash
-
-If empty (0xFFFFFFFF) → returns 0
-
-🔹 Write_ButtonCount()
-
-Erases Flash sector
-
-Writes updated count
-
-🔹 Erase_Flash_Sector7()
-
-Clears Flash memory safely
-
-🔹 GPIO
-
-PC13 → Button input
-
-PA5 → LED output
-
-🔹 UART (USART2)
-
-Baud Rate: 115200
-
-Used for displaying count
-
-📊 Example Output
-System Booted. Button pressed: 0 times
-
-Button pressed: 1 times
-Button pressed: 2 times
+ Button pressed: 5 times
 
 Count exceeded 5.
-Flash erased, count reset.
+ Flash erased, count reset.
 
-Button pressed: 1 times
-🧪 Test Cases Summary
-Test Case	Description	Result
-TC1	First startup	Count = 0
-TC2	Button press	Count increments
-TC3	Rapid press	Single increment
-TC4	Reset	Value persists
-TC5	Power loss	Value persists
-⚠️ Challenges & Solutions
-Challenge	Solution
-Flash cannot overwrite	Used erase before write
-Power loss corruption	Checked for 0xFFFFFFFF
-Button noise	Added 50 ms debounce
-Flash limited life	Minimized writes
-UART overlap	Added delays
-🏆 Results
+ Button pressed: 1 times
+```
 
-Counter successfully stored in Flash
+On the next power-up after the session above:
 
-Data retained after reset and power loss
+```
+System Booted. Button pressed: 1 times
+```
 
-UART output verified system behavior
+The count survived the power cycle — fetched directly from flash Sector 7 at `0x08060000`.
 
-Debounce ensured accurate counting
+---
 
-LED provided visual confirmation
-
-🔮 Future Improvements
-
-Interrupt-based button handling
-
-EEPROM emulation
-
-Wear-leveling for Flash life
-
-LCD/OLED display integration
-
-Modular code structure
-
-📚 Learning Outcomes
-
-Flash memory handling in STM32
-
-GPIO interfacing
-
-UART communication
-
-Embedded C with HAL
-
-Data persistence techniques
-
-👨‍💻 Team Members
-
-Atharva Bobade
-
-Siddharth Dere
-
-Naresh Choudhary
-
-🏫 College
-
-AISSMS Institute of Information Technology, Pune
-
-📅 Date
-
-07/11/2025
-
-📖 References
-
-STM32F446RE Datasheet
-
-STM32 HAL Documentation
-
-Flash Programming Manual (PM0075)
-
-STM32CubeIDE Guide
-
-Online Embedded Tutorials
+*STM32CubeIDE · HAL Library · C · Internal Flash Storage*
