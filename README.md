@@ -3,7 +3,7 @@
 A technician presses a button each time a service is performed. The system counts every press, stores it in internal flash, and recalls it on every reboot — even after a complete power loss. No external EEPROM, no battery-backed RAM. Just the MCU's own flash and a UART terminal.
 
 > Built at AISSMS Institute of Information Technology, Pune  
-> Atharva Bobade · Siddharth Dere · Naresh Choudhary
+> Naresh Choudhary Atharva Bobade · Siddharth Dere · 
 
 ---
 
