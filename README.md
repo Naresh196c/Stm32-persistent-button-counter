@@ -22,34 +22,8 @@ The counter resets to 0 after 5 presses (configurable), erasing and rewriting th
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                      STM32F446RE                        │
-│                                                         │
-│   PC13 ──► GPIO Poll ──► Debounce (50ms)                │
-│                               │                         │
-│                        Valid Press?                      │
-│                          │       │                       │
-│                         YES      NO ──► keep polling     │
-│                          │                               │
-│                    Increment Counter                     │
-│                          │                               │
-│              ┌───────────┴────────────┐                  │
-│              │                        │                  │
-│        Blink LED (PA5)     Write to Flash Sector 7       │
-│                                 │                        │
-│                        0x08060000 (32-bit word)          │
-│                                 │                        │
-│                        HAL_FLASHEx_Erase()               │
-│                        HAL_FLASH_Program()               │
-│                                                         │
-│   Power ON / Reset                                      │
-│        │                                                 │
-│   Read_ButtonCount() ◄── Flash Sector 7                  │
-│        │                                                 │
-│   HAL_UART_Transmit() ──► USART2 (PA2) ──► Terminal     │
-└─────────────────────────────────────────────────────────┘
-```
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/04d5dbf3-dbeb-491b-9fc1-e7496ab60f44" />
+
 
 **Data flow summary:**  
 Button → GPIO → Debounce → Counter → Flash (persist) → UART (report)
@@ -123,6 +97,9 @@ No external libraries or package managers needed. Everything uses the STM32 HAL 
 ---
 
 ## Sample Run Output
+
+
+<img width="1090" height="653" alt="image" src="https://github.com/user-attachments/assets/08ddff83-3e66-4930-a29e-83affceb122e" />
 
 ```
 System Booted. Button pressed: 3 times
